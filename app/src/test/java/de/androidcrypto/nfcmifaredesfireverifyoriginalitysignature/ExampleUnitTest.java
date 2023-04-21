@@ -1,4 +1,4 @@
-package de.androidcrypto.nfcmifareultralightev1verifyoriginalitysignature;
+package de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature;
 
 import org.junit.Test;
 

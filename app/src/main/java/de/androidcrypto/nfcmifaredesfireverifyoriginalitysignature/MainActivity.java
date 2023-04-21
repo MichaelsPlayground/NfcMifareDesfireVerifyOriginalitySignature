@@ -1,4 +1,4 @@
-package de.androidcrypto.nfcmifareultralightev1verifyoriginalitysignature;
+package de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature;
 
 import android.content.Context;
 import android.nfc.NfcAdapter;
@@ -50,7 +50,8 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
 
         mNfcAdapter = NfcAdapter.getDefaultAdapter(this);
 
-        publicKeyNxp.setText("0490933bdcd6e99b4e255e3da55389a827564e11718e017292faf23226a96614b8"); // Ultralight EV1
+        // ultralight ev1: publicKeyNxp.setText("0490933bdcd6e99b4e255e3da55389a827564e11718e017292faf23226a96614b8"); // Ultralight EV1
+        publicKeyNxp.setText("040E98E117AAA36457F43173DC920A8757267F44CE4EC5ADD3C54075571AEBBF7B942A9774A1D94AD02572427E5AE0A2DD36591B1FB34FCF3D");
     }
 
     // This method is run in another thread when a card is discovered
@@ -150,6 +151,17 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         }
 
         // now we are going to verify
+
+        // todo change this manual data to real data
+        String tagSignatureString = "1CA298FC3F0F04A329254AC0DF7A3EB8E756C076CD1BAAF47B8BBA6DCD78BCC64DFD3E80E679D9A663CAE9E4D4C2C77023077CC549CE4A61";
+        tagSignatureByte = Utils.hexStringToByteArray(tagSignatureString);
+        String tagIdString = "045A115A346180";
+        tagIdByte = Utils.hexStringToByteArray(tagIdString);
+        runOnUiThread(() -> {
+            tagSignature.setText(tagSignatureString);
+            tagId.setText(tagIdString);
+        });
+
         // get the public key
         String publicKeyString = publicKeyNxp.getText().toString();
         try {
@@ -172,7 +184,18 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                                               final byte[]
                                                       signature, final byte[] data) throws NoSuchAlgorithmException {
         final ECPublicKeySpec ecPubKeySpec = getEcPubKey(ecPubKey,
+                getEcSecp224r1());
+        if (ecPubKeySpec == null) {
+            System.out.println("*** ecPubKeySpec == null");
+        } else {
+            System.out.println("*** ecPubKeySpec NOT null");
+        }
+
+
+        /*
+        final ECPublicKeySpec ecPubKeySpec = getEcPubKey(ecPubKey,
                 getEcSecp128r1());
+        */
         return checkEcdsaSignature(ecPubKeySpec, signature, data);
     }
 
@@ -205,7 +228,11 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
     public static ECPublicKeySpec getEcPubKey(final String key, final
     ECParameterSpec
             curve) {
-        if (key == null || key.length() != 2 * 33 || !key.startsWith("04")) {
+        System.out.println("*** getEcPubKey ***");
+        System.out.println("key length: " + key.length());
+        //if (key == null || key.length() != 2 * 33 || !key.startsWith("04")) { // curve ecp128r1
+        if (key == null || key.length() != 2 * 57 || !key.startsWith("04")) { // curve Secp224r1
+            System.out.println("*** getEcPubKey has to return NULL");
             return null;
         }
 
@@ -218,6 +245,33 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
 
         return new ECPublicKeySpec(w, curve);
     }
+
+    public static ECParameterSpec getEcSecp224r1() {
+        // see: https://github.com/Archerxy/ecdsa_java/blob/master/archer/algorithm/ecdsa/Curve.java
+        // EC definition of "secp128r1":
+        final BigInteger p = new
+                BigInteger("26959946667150639794667015087019630673557916260026308143510066298881");
+        final ECFieldFp field = new ECFieldFp(p);
+// todo FP(p)
+        final BigInteger a = new
+                BigInteger("26959946667150639794667015087019630673557916260026308143510066298878");
+        final BigInteger b = new
+                BigInteger("18958286285566608000408668544493926415504680968679321075787234672564");
+        final EllipticCurve curve = new EllipticCurve(field, a, b);
+
+        final BigInteger genX = new
+                BigInteger("19277929113566293071110308034699488026831934219452440156649784352033");
+        final BigInteger genY = new
+                BigInteger("19926808758034470970197974370888749184205991990603949537637343198772");
+        final ECPoint generator = new ECPoint(genX, genY);
+
+        final BigInteger order = new
+                BigInteger("26959946667150639794667015087019625940457807714424391721682722368061");
+        final int cofactor = 1;
+
+        return new ECParameterSpec(curve, generator, order, cofactor);
+    }
+
 
     public static ECParameterSpec getEcSecp128r1() {
         // EC definition of "secp128r1":
