@@ -1,5 +1,7 @@
 package de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature;
 
+import android.util.Base64;
+
 public class Utils {
 
     public static String removeAllNonAlphaNumeric(String s) {
@@ -78,6 +80,8 @@ public class Utils {
         return output;
     }
 
-
+    public static byte[] base64Decoding(String input) {
+        return Base64.decode(input, Base64.NO_WRAP);
+    }
 
 }

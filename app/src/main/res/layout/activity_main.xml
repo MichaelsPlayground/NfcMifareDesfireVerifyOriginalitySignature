@@ -16,7 +16,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="10dp"
-            android:text="Mifare Ultralight EV1: Read the tag id and verify the originality signature against the Public Key"
+            android:text="Mifare Desfire EVx: Read the tag id and verify the originality signature against the Public Key"
             android:textAlignment="center"
             android:textSize="20sp"
             android:textStyle="bold" />
@@ -95,7 +95,7 @@
             android:layout_marginStart="8dp"
             android:layout_marginTop="16dp"
             android:layout_marginEnd="8dp"
-            android:hint="EC Public key from NXP for Ultralight EV1"
+            android:hint="EC Public key from NXP for Desfire EVx"
             app:boxCornerRadiusBottomEnd="5dp"
             app:boxCornerRadiusBottomStart="5dp"
             app:boxCornerRadiusTopEnd="5dp"
@@ -109,9 +109,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:maxLines="3"
+                android:maxLines="5"
                 android:focusable="false"
-                android:text="ECC public key from NXP"
+                android:text="EC public key from NXP"
                 tools:ignore="KeyboardInaccessibleWidget" />
         </com.google.android.material.textfield.TextInputLayout>
 

@@ -1,5 +1,7 @@
 package de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature;
 
+import static de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature.Utils.base64Decoding;
+
 import android.content.Context;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
@@ -23,12 +25,14 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
+import java.security.interfaces.ECPublicKey;
 import java.security.spec.ECFieldFp;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPoint;
 import java.security.spec.ECPublicKeySpec;
 import java.security.spec.EllipticCurve;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 
 public class MainActivity extends AppCompatActivity implements NfcAdapter.ReaderCallback {
@@ -36,7 +40,11 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
     EditText tagId, tagSignature, publicKeyNxp, readResult;
     private NfcAdapter mNfcAdapter;
     byte[] tagIdByte, tagSignatureByte, publicKeyByte;
-    boolean signatureVerfied = false;
+    boolean signatureVerified = false;
+
+    // generate this value once for a curve by using createHeadForNamedCurve
+    // e.g. secp224r1 length 224 or NIST P-256 length 256
+    private static byte[] SECP224R1_HEAD = base64Decoding("ME4wEAYHKoZIzj0CAQYFK4EEACEDOgAE"); // this is the header of secp224r1
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -152,26 +160,30 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
 
         // now we are going to verify
 
-        // todo change this manual data to real data
-        String tagSignatureString = "1CA298FC3F0F04A329254AC0DF7A3EB8E756C076CD1BAAF47B8BBA6DCD78BCC64DFD3E80E679D9A663CAE9E4D4C2C77023077CC549CE4A61";
-        tagSignatureByte = Utils.hexStringToByteArray(tagSignatureString);
-        String tagIdString = "045A115A346180";
-        tagIdByte = Utils.hexStringToByteArray(tagIdString);
-        runOnUiThread(() -> {
-            tagSignature.setText(tagSignatureString);
-            tagId.setText(tagIdString);
-        });
 
         // get the public key
         String publicKeyString = publicKeyNxp.getText().toString();
+        byte[] w = Utils.hexStringToByteArray("1DB46C145D0A36539C6544BD6D9B0AA62FF91EC48CBC6ABAE36E0089A46F0D08C8A715EA40A63313B92E90DDC1730230E0458A33276FB743");
+        //byte[] w = Utils.hexStringToByteArray("8A9B380AF2EE1B98DC417FECC263F8449C7625CECE82D9B916C992DA209D68422B81EC20B65A66B5102A61596AF3379200599316A00A1410");
+        //byte[] w = Utils.hexStringToByteArray("1DB46C145D0A36539C6544BD6D9B0AA62FF91EC48CBC6ABAE36E0089A46F0D08C8A715EA40A63313B92E90DDC1730230E0458A33276FB743"); // desfireEv3
+        //byte[] w = Utils.hexStringToByteArray("0E98E117AAA36457F43173DC920A8757267F44CE4EC5ADD3C54075571AEBBF7B942A9774A1D94AD02572427E5AE0A2DD36591B1FB34FCF3D");
+        //byte[] w = Utils.hexStringToByteArray(publicKeyString); // the publicKey string contains a leading 04 - trim it off
+        //w = Arrays.copyOfRange(w, 1, w.length);
+        ECPublicKey key = null;
         try {
-            signatureVerfied = checkEcdsaSignature(publicKeyString, tagSignatureByte, tagIdByte);
+            key = generateP256PublicKeyFromFlatW(w);
+        } catch (InvalidKeySpecException e) {
+            throw new RuntimeException(e);
+        }
+
+        try {
+            signatureVerified = checkEcdsaSignatureEcPubKey(key, tagSignatureByte, tagIdByte);
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
-        writeToUiAppend(readResult, "SignatureVerified: " + signatureVerfied);
+        writeToUiAppend(readResult, "SignatureVerified: " + signatureVerified);
         runOnUiThread(() -> {
-            if (signatureVerfied) {
+            if (signatureVerified) {
                 readResult.setBackgroundColor(getResources().getColor(R.color.light_background_green));
             } else {
                 readResult.setBackgroundColor(getResources().getColor(R.color.light_background_red));
@@ -179,130 +191,50 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         });
     }
 
-    // START code from NXP's AN11350 document (NTAG21x Originality Signature Validation)
-    public static boolean checkEcdsaSignature(final String ecPubKey,
-                                              final byte[]
-                                                      signature, final byte[] data) throws NoSuchAlgorithmException {
-        final ECPublicKeySpec ecPubKeySpec = getEcPubKey(ecPubKey,
-                getEcSecp224r1());
-        if (ecPubKeySpec == null) {
-            System.out.println("*** ecPubKeySpec == null");
-        } else {
-            System.out.println("*** ecPubKeySpec NOT null");
+    /**
+     * Converts an uncompressed secp256r1 / P-256 public point to the EC public key it is representing.
+     * @param w a 64 byte uncompressed EC point consisting of just a 256-bit X and Y
+     * @return an <code>ECPublicKey</code> that the point represents
+     */
+    public ECPublicKey generateP256PublicKeyFromFlatW(byte[] w) throws InvalidKeySpecException {
+        byte[] encodedKey = new byte[SECP224R1_HEAD.length + w.length];
+        System.arraycopy(SECP224R1_HEAD, 0, encodedKey, 0, SECP224R1_HEAD.length);
+        System.arraycopy(w, 0, encodedKey, SECP224R1_HEAD.length, w.length);
+        KeyFactory eckf;
+        try {
+            eckf = KeyFactory.getInstance("EC");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("EC key factory not present in runtime");
         }
-
-
-        /*
-        final ECPublicKeySpec ecPubKeySpec = getEcPubKey(ecPubKey,
-                getEcSecp128r1());
-        */
-        return checkEcdsaSignature(ecPubKeySpec, signature, data);
+        X509EncodedKeySpec ecpks = new X509EncodedKeySpec(encodedKey);
+        return (ECPublicKey) eckf.generatePublic(ecpks);
     }
 
-    public static boolean checkEcdsaSignature(final ECPublicKeySpec
-                                                      ecPubKey, final byte[]
-                                                      signature, final byte[] data)
+    public boolean checkEcdsaSignatureEcPubKey(final ECPublicKey
+                                                              ecPubKey, final byte[]
+                                                              signature, final byte[] data)
             throws NoSuchAlgorithmException
     {
-        KeyFactory keyFac = null;
         try {
-            keyFac = KeyFactory.getInstance("EC");
-        } catch (final NoSuchAlgorithmException e1) {
-            keyFac = KeyFactory.getInstance("ECDSA");
+            //final PublicKey publicKey = keyFac.generatePublic(ecPubKey);
+            final Signature dsa = Signature.getInstance("NONEwithECDSA");
+            dsa.initVerify(ecPubKey);
+            dsa.update(data);
+            return dsa.verify(derEncodeSignatureSecp224r1(signature));
+        } catch (final SignatureException | InvalidKeyException e) {
+            e.printStackTrace();
         }
-
-        if (keyFac != null) {
-            try {
-                final PublicKey publicKey = keyFac.generatePublic(ecPubKey);
-                final Signature dsa = Signature.getInstance("NONEwithECDSA");
-                dsa.initVerify(publicKey);
-                dsa.update(data);
-                return dsa.verify(derEncodeSignature(signature));
-            } catch (final SignatureException | InvalidKeySpecException | InvalidKeyException e) {
-                e.printStackTrace();
-            }
-        }
-
         return false;
     }
-    public static ECPublicKeySpec getEcPubKey(final String key, final
-    ECParameterSpec
-            curve) {
-        System.out.println("*** getEcPubKey ***");
-        System.out.println("key length: " + key.length());
-        //if (key == null || key.length() != 2 * 33 || !key.startsWith("04")) { // curve ecp128r1
-        if (key == null || key.length() != 2 * 57 || !key.startsWith("04")) { // curve Secp224r1
-            System.out.println("*** getEcPubKey has to return NULL");
-            return null;
-        }
 
-        final String keyX = key.substring(2 * 1, 2 * 17);
-        final String keyY = key.substring(2 * 17, 2 * 33);
-
-        final BigInteger affineX = new BigInteger(keyX, 16);
-        final BigInteger affineY = new BigInteger(keyY, 16);
-        final ECPoint w = new ECPoint(affineX, affineY);
-
-        return new ECPublicKeySpec(w, curve);
-    }
-
-    public static ECParameterSpec getEcSecp224r1() {
-        // see: https://github.com/Archerxy/ecdsa_java/blob/master/archer/algorithm/ecdsa/Curve.java
-        // EC definition of "secp128r1":
-        final BigInteger p = new
-                BigInteger("26959946667150639794667015087019630673557916260026308143510066298881");
-        final ECFieldFp field = new ECFieldFp(p);
-// todo FP(p)
-        final BigInteger a = new
-                BigInteger("26959946667150639794667015087019630673557916260026308143510066298878");
-        final BigInteger b = new
-                BigInteger("18958286285566608000408668544493926415504680968679321075787234672564");
-        final EllipticCurve curve = new EllipticCurve(field, a, b);
-
-        final BigInteger genX = new
-                BigInteger("19277929113566293071110308034699488026831934219452440156649784352033");
-        final BigInteger genY = new
-                BigInteger("19926808758034470970197974370888749184205991990603949537637343198772");
-        final ECPoint generator = new ECPoint(genX, genY);
-
-        final BigInteger order = new
-                BigInteger("26959946667150639794667015087019625940457807714424391721682722368061");
-        final int cofactor = 1;
-
-        return new ECParameterSpec(curve, generator, order, cofactor);
-    }
-
-
-    public static ECParameterSpec getEcSecp128r1() {
-        // EC definition of "secp128r1":
-        final BigInteger p = new
-                BigInteger("fffffffdffffffffffffffffffffffff", 16);
-        final ECFieldFp field = new ECFieldFp(p);
-
-        final BigInteger a = new
-                BigInteger("fffffffdfffffffffffffffffffffffc", 16);
-        final BigInteger b = new
-                BigInteger("e87579c11079f43dd824993c2cee5ed3", 16);
-        final EllipticCurve curve = new EllipticCurve(field, a, b);
-
-        final BigInteger genX = new
-                BigInteger("161ff7528b899b2d0c28607ca52c5b86", 16);
-        final BigInteger genY = new
-                BigInteger("cf5ac8395bafeb13c02da292dded7a83", 16);
-        final ECPoint generator = new ECPoint(genX, genY);
-
-        final BigInteger order = new
-                BigInteger("fffffffe0000000075a30d1b9038a115", 16);
-        final int cofactor = 1;
-
-        return new ECParameterSpec(curve, generator, order, cofactor);
-    }
-
-    public static byte[] derEncodeSignature(final byte[] signature) {
+    public static byte[] derEncodeSignatureSecp224r1(final byte[] signature) {
         // split into r and s
+        final byte[] r = Arrays.copyOfRange(signature, 0, 28);
+        final byte[] s = Arrays.copyOfRange(signature, 28, 56);
+        /* code for secp128r1
         final byte[] r = Arrays.copyOfRange(signature, 0, 16);
         final byte[] s = Arrays.copyOfRange(signature, 16, 32);
-
+        */
         int rLen = r.length;
         int sLen = s.length;
         if ((r[0] & 0x80) != 0) {
@@ -328,7 +260,6 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
 
         return encodedSig;
     }
-    // END code from NXP's AN11350 document (NTAG21x Originality Signature Validation)
 
     private void writeToUiAppend(TextView textView, String message) {
         runOnUiThread(() -> {
