@@ -1,12 +1,14 @@
-# NFC Verify the originality signature of NXP's Mifare Desfire EV2
+# NFC Verify the originality signature of NXP's Mifare Desfire Light
 
-This app is verifying the ("originality") signature of a Mifare Desfire EV2 tag.
+This app is verifying the ("originality") signature of a Mifare Desfire Light tag.
 
 Kindly note that the code for verification of the signature is taken from the application note  
 AN11350, provided by NXP.
 
 The **Public Key** is taken from a public available document: Mifare DESFire Light Features and Hints AN12343.pdf
 (see pages 86-88).
+
+
 
 These are the specifications of the signature:
 ```plaintext
