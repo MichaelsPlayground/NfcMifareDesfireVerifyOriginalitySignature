@@ -1,16 +1,22 @@
-# NFC Verify the originality signature of NXP's Mifare Desfire Light
+# NFC Verify the originality signature of NXP's Mifare DESFire Light and EV2/EV3
 
-This app is verifying the ("originality") signature of a Mifare Desfire Light tag.
+This app is verifying the ("originality") signature of a Mifare DESFire Light or EV2 / EV3 tag.
+
+Note: As the DESFire EV1 tag 
 
 Kindly note that the code for verification of the signature is taken from the application note  
-AN11350, provided by NXP.
+AN11350, provided by NXP. Unfortunately the curve of the signature changed from SECP128R1 to SECP224R1. 
+To verify the signature I'm rebuilding the public key using a helper method provided by Maarten Bodewes on 
+StackOverflow.com.
 
-The **Public Key** is taken from a public available document: Mifare DESFire Light Features and Hints AN12343.pdf
-(see pages 86-88).
+As the tag producer, NXP, decided to use different public keys for different tag types I need to run a 
+"get version" command first on the tag and depending on the response I'm using the correct public key.
 
+The **Public Key** for DESFire Light is taken from a public available document: Mifare DESFire Light Features and Hints AN12343.pdf 
+(see pages 86-88). The public keys for DESFire EV2 and DESFire EV3 were published in a GitHub repository:
+https://github.com/RfidResearchGroup/proxmark3/blob/906e3f4c3262b456c3bb83982e930381f8c96def/client/src/cmdhfmfdes.c.
 
-
-These are the specifications of the signature:
+These are the specifications of the signature (taken from the referenced NXP document):
 ```plaintext
 - Key type: Elliptic Curve
 - Curve: SECP224R1
@@ -83,16 +89,3 @@ The app is runnable on Android SDKs from 21+, developed on Android 13 (SDK 33).
 The app icon is generated with help from **Launcher icon generator**
 (https://romannurik.github.io/AndroidAssetStudio/icons-launcher.html),
 (options trim image and resize to 110%, color #2196F3).
-
-
-Some real combinations:
-```plaintext
-Tag type               UID            Signature
-Mifare Ultralight EV1  047cd36a6e1091 4ce2bf3c393a88ccfd0ea51d42c4950d26c98f2ec1452817c4437a77075a0c0d
-Mifare DESFire EV1 2K  046d759aa47780 no signature
-Mifare DESFire EV2 2K  041a5dc2d37580 90f0e2337f3c0be9a84a4b5f343c57bc421c8240469c7c320cc39892bd2d19f57d2a48c81c4a2e810b813a9c6cb66ec34cad4c847def9a9d41
-Mifare DESFire EV2 4K  041858fa991190 9068b90250e2d8066de5cd1c16d799f826fd3c43af804b1d9fc7e2e907a804134f8acba8981ad1ff4a85f03d15fd03e78b359dd2879d0dbf28
-Mifare DESFire EV3 2K  04597a32501490 9023b80023f6f970be3b9d47908cb80b284c7c6f8d8a25509e741af818271e9010279f449138df1e2d2c0cf37b1b677dc4354fbb97ca2e7581
-Mifare DESFire Light   049ba07af16780 no signature
-
-```
