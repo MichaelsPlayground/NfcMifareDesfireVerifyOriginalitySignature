@@ -68,7 +68,7 @@ line 386
         {"MIFARE Plus Troika", "040F732E0EA7DF2B38F791BF89425BF7DCDF3EE4D976669E3831F324FF15751BD52AFF1782F72FF2731EEAD5F63ABE7D126E03C856FFB942AF"},
     };
 ```
-
+dz6
 
 Don't forget to add these 2 permissions to your AndroidManifest.xml:
 ```plaintext
@@ -81,3 +81,16 @@ The app is runnable on Android SDKs from 21+, developed on Android 13 (SDK 33).
 The app icon is generated with help from **Launcher icon generator**
 (https://romannurik.github.io/AndroidAssetStudio/icons-launcher.html),
 (options trim image and resize to 110%, color #2196F3).
+
+
+Some real combinations:
+```plaintext
+Tag type               UID            Signature
+Mifare Ultralight EV1  047cd36a6e1091 4ce2bf3c393a88ccfd0ea51d42c4950d26c98f2ec1452817c4437a77075a0c0d
+Mifare DESFire EV1 2K  046d759aa47780 no signature
+Mifare DESFire EV2 2K  041a5dc2d37580 90f0e2337f3c0be9a84a4b5f343c57bc421c8240469c7c320cc39892bd2d19f57d2a48c81c4a2e810b813a9c6cb66ec34cad4c847def9a9d41
+Mifare DESFire EV2 4K  041858fa991190 9068b90250e2d8066de5cd1c16d799f826fd3c43af804b1d9fc7e2e907a804134f8acba8981ad1ff4a85f03d15fd03e78b359dd2879d0dbf28
+Mifare DESFire EV3 2K  04597a32501490 9023b80023f6f970be3b9d47908cb80b284c7c6f8d8a25509e741af818271e9010279f449138df1e2d2c0cf37b1b677dc4354fbb97ca2e7581
+Mifare DESFire Light   049ba07af16780 no signature
+
+```

@@ -139,7 +139,7 @@
                 android:ellipsize="end"
                 android:maxLines="5"
                 android:focusable="false"
-                android:text="Elliptic curve: SECP128R1"
+                android:text="Elliptic curve: SECP224R1"
                 tools:ignore="KeyboardInaccessibleWidget" />
         </com.google.android.material.textfield.TextInputLayout>
 

@@ -1,11 +1,13 @@
 package de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature;
 
 import static de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature.Utils.base64Decoding;
+import static de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature.Utils.hexStringToByteArray;
 
 import android.content.Context;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.TagLostException;
+import android.nfc.tech.IsoDep;
 import android.nfc.tech.NfcA;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,6 +19,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.security.InvalidKeyException;
@@ -72,14 +75,14 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
 
         System.out.println("NFC tag discovered");
 
-        NfcA nfcA = null;
+        IsoDep isoDep = null;
 
         try {
-            nfcA = NfcA.get(tag);
-            if (nfcA != null) {
+            isoDep = IsoDep.get(tag);
+            if (isoDep != null) {
                 runOnUiThread(() -> {
                     Toast.makeText(getApplicationContext(),
-                            "NFC tag is Nfca compatible",
+                            "NFC tag is IsoDep compatible",
                             Toast.LENGTH_SHORT).show();
                 });
 
@@ -96,7 +99,7 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                     readResult.setBackgroundColor(getResources().getColor(R.color.white));
                 });
 
-                nfcA.connect();
+                isoDep.connect();
 
                 System.out.println("*** tagId: " + Utils.bytesToHex(tag.getId()));
 
@@ -109,10 +112,17 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                 byte[] response = new byte[0];
 
                 try {
-                    String commandString = "3C00"; // read signature
-                    byte[] commandByte = Utils.hexStringToByteArray(commandString);
+                    byte getSignatureCommand = (byte) 0x3c;
+                    byte[] getSignatureCommandParameter = new byte[]{(byte) 0x00};
+                    byte[] wrappedCommand;
                     try {
-                        response = nfcA.transceive(commandByte); // response should be 16 bytes = 4 pages
+                         wrappedCommand = wrapMessage(getSignatureCommand, getSignatureCommandParameter, 0, getSignatureCommandParameter.length);
+                    } catch (Exception e) {
+                        writeToUiAppend(readResult, "Error when wrapping the command: " + e.getMessage());
+                        return;
+                    }
+                    try {
+                        response = isoDep.transceive(wrappedCommand);
                         if (response == null) {
                             // either communication to the tag was lost or a NACK was received
                             writeToUiAppend(readResult, "ERROR: null response");
@@ -130,6 +140,38 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                             runOnUiThread(() -> {
                                 tagSignature.setText(Utils.bytesToHex(tagSignatureByte));
                             });
+
+                            // now we are going to verify
+
+                            // get the data from UI
+                            byte[] uid = hexStringToByteArray(tagId.getText().toString());
+                            System.out.println("tagSignature: " + tagSignature.getText().toString() + "###");
+                            //byte[] signature = hexStringToByteArray(tagSignature.getText().toString());
+                            byte[] publicKeyByte = hexStringToByteArray(publicKeyNxp.getText().toString());
+                            // get the EC Public Key
+                            ECPublicKey ecPubKey = null;
+                            try {
+                                ecPubKey = generateP256PublicKeyFromUncompressedW(publicKeyByte);
+                            } catch (InvalidKeySpecException e) {
+                                //throw new RuntimeException(e);
+                                writeToUiAppend(readResult, ("Error on getting the key (native Java): " + e.getMessage()));
+                            }
+                            try {
+                                signatureVerified = checkEcdsaSignatureEcPubKey(ecPubKey, tagSignatureByte, tagIdByte);
+                            } catch (NoSuchAlgorithmException e) {
+                                //throw new RuntimeException(e);
+                                writeToUiAppend(readResult, ("Error in checkEcdsaSignatureEcPubKey: " + e.getMessage()));
+                            }
+
+                            writeToUiAppend(readResult, "SignatureVerified: " + signatureVerified);
+                            runOnUiThread(() -> {
+                                if (signatureVerified) {
+                                    readResult.setBackgroundColor(getResources().getColor(R.color.light_background_green));
+                                } else {
+                                    readResult.setBackgroundColor(getResources().getColor(R.color.light_background_red));
+                                }
+                            });
+
                         }
                     } catch (TagLostException e) {
                         // Log and return
@@ -146,7 +188,7 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                     }
                 } finally {
                     try {
-                        nfcA.close();
+                        isoDep.close();
                     } catch (IOException e) {
                         writeToUiAppend(readResult, "ERROR: IOException " + e.toString());
                         e.printStackTrace();
@@ -157,38 +199,40 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
             writeToUiAppend(readResult, "ERROR: IOException " + e.toString());
             e.printStackTrace();
         }
+    }
 
-        // now we are going to verify
+    public static byte[] wrapMessage (byte command) throws Exception {
+        return new byte[]{(byte) 0x90, command, 0x00, 0x00, 0x00};
+    }
 
+    public static byte[] wrapMessage (byte command, byte[] parameters, int offset, int length) throws Exception {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
 
-        // get the public key
-        String publicKeyString = publicKeyNxp.getText().toString();
-        byte[] w = Utils.hexStringToByteArray("1DB46C145D0A36539C6544BD6D9B0AA62FF91EC48CBC6ABAE36E0089A46F0D08C8A715EA40A63313B92E90DDC1730230E0458A33276FB743");
-        //byte[] w = Utils.hexStringToByteArray("8A9B380AF2EE1B98DC417FECC263F8449C7625CECE82D9B916C992DA209D68422B81EC20B65A66B5102A61596AF3379200599316A00A1410");
-        //byte[] w = Utils.hexStringToByteArray("1DB46C145D0A36539C6544BD6D9B0AA62FF91EC48CBC6ABAE36E0089A46F0D08C8A715EA40A63313B92E90DDC1730230E0458A33276FB743"); // desfireEv3
-        //byte[] w = Utils.hexStringToByteArray("0E98E117AAA36457F43173DC920A8757267F44CE4EC5ADD3C54075571AEBBF7B942A9774A1D94AD02572427E5AE0A2DD36591B1FB34FCF3D");
-        //byte[] w = Utils.hexStringToByteArray(publicKeyString); // the publicKey string contains a leading 04 - trim it off
-        //w = Arrays.copyOfRange(w, 1, w.length);
-        ECPublicKey key = null;
-        try {
-            key = generateP256PublicKeyFromFlatW(w);
-        } catch (InvalidKeySpecException e) {
-            throw new RuntimeException(e);
+        stream.write((byte) 0x90);
+        stream.write(command);
+        stream.write((byte) 0x00);
+        stream.write((byte) 0x00);
+        if (parameters != null && length > 0) {
+            // actually no length if empty length
+            stream.write(length);
+            stream.write(parameters, offset, length);
         }
+        stream.write((byte) 0x00);
 
-        try {
-            signatureVerified = checkEcdsaSignatureEcPubKey(key, tagSignatureByte, tagIdByte);
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
+        return stream.toByteArray();
+    }
+
+
+    /**
+     * Converts an uncompressed secp256r1 / P-256 public point to the EC public key it is representing.
+     * @param w a 64 byte uncompressed EC point starting with <code>04</code>
+     * @return an <code>ECPublicKey</code> that the point represents
+     */
+    public ECPublicKey generateP256PublicKeyFromUncompressedW(byte[] w) throws InvalidKeySpecException {
+        if (w[0] != 0x04) {
+            throw new InvalidKeySpecException("w is not an uncompressed key");
         }
-        writeToUiAppend(readResult, "SignatureVerified: " + signatureVerified);
-        runOnUiThread(() -> {
-            if (signatureVerified) {
-                readResult.setBackgroundColor(getResources().getColor(R.color.light_background_green));
-            } else {
-                readResult.setBackgroundColor(getResources().getColor(R.color.light_background_red));
-            }
-        });
+        return generateP256PublicKeyFromFlatW(Arrays.copyOfRange(w, 1, w.length));
     }
 
     /**
@@ -265,6 +309,7 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         runOnUiThread(() -> {
             String newString = message + "\n" + textView.getText().toString();
             textView.setText(newString);
+            System.out.println("signature: " + message);
         });
     }
 
