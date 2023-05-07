@@ -1,6 +1,7 @@
 package de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature;
 
 import static de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature.Utils.base64Decoding;
+import static de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature.Utils.bytesToHex;
 import static de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature.Utils.hexStringToByteArray;
 
 import android.content.Context;
@@ -14,9 +15,12 @@ import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.ByteArrayOutputStream;
@@ -40,10 +44,15 @@ import java.util.Arrays;
 
 public class MainActivity extends AppCompatActivity implements NfcAdapter.ReaderCallback {
 
-    EditText tagId, tagSignature, publicKeyNxp, readResult;
+    ScrollView scrollView;
+    EditText tagId, tagType, tagSignature, publicKeyNxp, readResult;
     private NfcAdapter mNfcAdapter;
-    byte[] tagIdByte, tagSignatureByte, publicKeyByte;
+    byte[] tagIdByte, tagSignatureByte;
     boolean signatureVerified = false;
+    final String PublicKeyNxpDESFire_Light = "040E98E117AAA36457F43173DC920A8757267F44CE4EC5ADD3C54075571AEBBF7B942A9774A1D94AD02572427E5AE0A2DD36591B1FB34FCF3D";
+    final String PublicKeyNxpDESFire_Ev2 = "04B304DC4C615F5326FE9383DDEC9AA892DF3A57FA7FFB3276192BC0EAA252ED45A865E3B093A3D0DCE5BE29E92F1392CE7DE321E3E5C52B3A";
+    final String PublicKeyNxpDESFire_Ev3 = "041DB46C145D0A36539C6544BD6D9B0AA62FF91EC48CBC6ABAE36E0089A46F0D08C8A715EA40A63313B92E90DDC1730230E0458A33276FB743";
+    private byte[] publicKeyNxpByte;
 
     // generate this value once for a curve by using createHeadForNamedCurve
     // e.g. secp224r1 length 224 or NIST P-256 length 256
@@ -54,7 +63,9 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        scrollView = findViewById(R.id.ScrollView);
         tagId = findViewById(R.id.etVerifyTagId);
+        tagType = findViewById(R.id.etVerifyTagType);
         tagSignature = findViewById(R.id.etVerifySignature);
         publicKeyNxp = findViewById(R.id.etVerifyPublicKey);
         readResult = findViewById(R.id.etVerifyResult);
@@ -62,12 +73,9 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         mNfcAdapter = NfcAdapter.getDefaultAdapter(this);
 
         // ultralight ev1: publicKeyNxp.setText("0490933bdcd6e99b4e255e3da55389a827564e11718e017292faf23226a96614b8"); // Ultralight EV1
-        publicKeyNxp.setText("040E98E117AAA36457F43173DC920A8757267F44CE4EC5ADD3C54075571AEBBF7B942A9774A1D94AD02572427E5AE0A2DD36591B1FB34FCF3D");
-        String publicKeyNxpDESFire_Light = "040E98E117AAA36457F43173DC920A8757267F44CE4EC5ADD3C54075571AEBBF7B942A9774A1D94AD02572427E5AE0A2DD36591B1FB34FCF3D";
-        String publicKeyNxpDESFire_Ev2 = "04B304DC4C615F5326FE9383DDEC9AA892DF3A57FA7FFB3276192BC0EAA252ED45A865E3B093A3D0DCE5BE29E92F1392CE7DE321E3E5C52B3A";
-        String publicKeyNxpDESFire_Ev3 = "041DB46C145D0A36539C6544BD6D9B0AA62FF91EC48CBC6ABAE36E0089A46F0D08C8A715EA40A63313B92E90DDC1730230E0458A33276FB743";
+        publicKeyNxp.setText("the public key depends on the DESFire tyg type");
 
-        publicKeyNxp.setText(publicKeyNxpDESFire_Ev2);
+        //publicKeyNxp.setText(publicKeyNxpDESFire_Ev3);
 
     }
 
@@ -118,11 +126,64 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                 byte[] response = new byte[0];
 
                 try {
+                    // get the tag version to use the matching public key
+                    byte[] getVersion = getVersion(isoDep);
+                    // if there is no version info it is no DESFire Light, EV2 or EV3
+                    if (getVersion == null) {
+                        writeToUiAppend(readResult, "Error when getting the version, aborted");
+                        return;
+                    }
+                    VersionInfo versionInfo = new VersionInfo(getVersion);
+                    writeToUiAppend(readResult, versionInfo.dump());
+                    // hardwareType 1 = DESFire, 8 = DESFire Light
+                    // hardwareVersionMajor 18 = EV2, 51 = EV3
+                    boolean isSupported = false;
+
+                    if (versionInfo.getHardwareType() == 8) {
+                        // DESFire Light
+                        publicKeyNxpByte = hexStringToByteArray(PublicKeyNxpDESFire_Light);
+                        isSupported = true;
+                        runOnUiThread(() -> {
+                            publicKeyNxp.setText(PublicKeyNxpDESFire_Light);
+                            tagType.setText("DESFire Light");
+                        });
+                    } else if (versionInfo.getHardwareType() == 1) {
+                        // DESFire EV1/EV2/EV3
+                        if (versionInfo.getHardwareVersionMajor() == 18) {
+                            //DESFire EV2
+                            publicKeyNxpByte = hexStringToByteArray(PublicKeyNxpDESFire_Ev2);
+                            isSupported = true;
+                            runOnUiThread(() -> {
+                                publicKeyNxp.setText(PublicKeyNxpDESFire_Ev2);
+                                tagType.setText("DESFire EV2");
+                            });
+                        } else if (versionInfo.getHardwareVersionMajor() == 51) {
+                            //DESFire EV3
+                            publicKeyNxpByte = hexStringToByteArray(PublicKeyNxpDESFire_Ev3);
+                            isSupported = true;
+                            runOnUiThread(() -> {
+                                publicKeyNxp.setText(PublicKeyNxpDESFire_Ev3);
+                                tagType.setText("DESFire EV3");
+                            });
+                        }
+                    }
+                    if (!isSupported) {
+                        writeToUiAppend(readResult, "This tag type is not supported, aborted");
+                        runOnUiThread(() -> {
+                            tagType.setText("unsupported DESFire tag");
+                        });
+                        return;
+                    }
+                    runOnUiThread(() -> {
+                        tagId.setText(Utils.bytesToHex(tagIdByte));
+                    });
+                    System.out.println(printData("publicKeyNxpByte", publicKeyNxpByte));
+                    // get the signature
                     byte getSignatureCommand = (byte) 0x3c;
                     byte[] getSignatureCommandParameter = new byte[]{(byte) 0x00};
                     byte[] wrappedCommand;
                     try {
-                         wrappedCommand = wrapMessage(getSignatureCommand, getSignatureCommandParameter, 0, getSignatureCommandParameter.length);
+                        wrappedCommand = wrapMessage(getSignatureCommand, getSignatureCommandParameter, 0, getSignatureCommandParameter.length);
                     } catch (Exception e) {
                         writeToUiAppend(readResult, "Error when wrapping the command: " + e.getMessage());
                         return;
@@ -148,16 +209,18 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                             });
 
                             // now we are going to verify
-
-                            // get the data from UI
-                            byte[] uid = hexStringToByteArray(tagId.getText().toString());
-                            System.out.println("tagSignature: " + tagSignature.getText().toString() + "###");
+//
+// signature: SUCCESS: response: 23b80023f6f970be3b9d47908cb80b284c7c6f8d8a25509e741af818271e9010279f449138df1e2d2c0cf37b1b677dc4354fbb97ca2e75819190
+// signature: SUCCESS: response: 23b80023f6f970be3b9d47908cb80b284c7c6f8d8a25509e741af818271e9010279f449138df1e2d2c0cf37b1b677dc4354fbb97ca2e75819190
+                            System.out.println("tagID: " + bytesToHex(tagIdByte));
+                            System.out.println("tagSignature: " + bytesToHex(tagSignatureByte));
+                            System.out.println("publicKeyByte: " + bytesToHex(publicKeyNxpByte));
                             //byte[] signature = hexStringToByteArray(tagSignature.getText().toString());
-                            byte[] publicKeyByte = hexStringToByteArray(publicKeyNxp.getText().toString());
+                            //byte[] publicKeyByte = hexStringToByteArray(publicKeyNxp.getText().toString());
                             // get the EC Public Key
                             ECPublicKey ecPubKey = null;
                             try {
-                                ecPubKey = generateP256PublicKeyFromUncompressedW(publicKeyByte);
+                                ecPubKey = generateP256PublicKeyFromUncompressedW(publicKeyNxpByte);
                             } catch (InvalidKeySpecException e) {
                                 //throw new RuntimeException(e);
                                 writeToUiAppend(readResult, ("Error on getting the key (native Java): " + e.getMessage()));
@@ -177,6 +240,14 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                                     readResult.setBackgroundColor(getResources().getColor(R.color.light_background_red));
                                 }
                             });
+
+
+                            scrollView.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    scrollView.fullScroll(ScrollView.FOCUS_DOWN);
+                                }
+                            },500);
 
                         }
                     } catch (TagLostException e) {
@@ -207,11 +278,11 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         }
     }
 
-    public static byte[] wrapMessage (byte command) throws Exception {
+    public static byte[] wrapMessage(byte command) throws Exception {
         return new byte[]{(byte) 0x90, command, 0x00, 0x00, 0x00};
     }
 
-    public static byte[] wrapMessage (byte command, byte[] parameters, int offset, int length) throws Exception {
+    public static byte[] wrapMessage(byte command, byte[] parameters, int offset, int length) throws Exception {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
 
         stream.write((byte) 0x90);
@@ -228,9 +299,119 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         return stream.toByteArray();
     }
 
+    private byte[] getVersion(IsoDep isoDep) {
+        // get the tag version to use the matching public key
+        byte[] response;
+        byte[] fullResponse = new byte[100]; // too much but you never know
+        int fullResponseLength = 0;
+        final byte getVersionCommand = (byte) 0x60;
+        final byte moreDataCommand = (byte) 0xaf;
+        try {
+            // 1. round
+            response = isoDep.transceive(wrapMessage(getVersionCommand));
+            System.out.println(printData("response 1", response));
+            if (checkResponseMoreData(response)) {
+                System.arraycopy(response, 0, fullResponse, 0, response.length - 2);
+                System.out.println(printData("fullresponse 1", fullResponse));
+                fullResponseLength = response.length - 2;
+                // 2. round
+                response = isoDep.transceive(wrapMessage(moreDataCommand));
+                System.out.println(printData("response 2", response));
+                if (checkResponseMoreData(response)) {
+                    System.arraycopy(response, 0, fullResponse, fullResponseLength, response.length - 2);
+                    fullResponseLength += (response.length - 2);
+                    System.out.println(printData("fullresponse 2", fullResponse));
+                    // 3. round
+                    response = isoDep.transceive(wrapMessage(moreDataCommand));
+                    System.out.println(printData("response 3", response));
+                    System.arraycopy(response, 0, fullResponse, fullResponseLength, response.length - 2);
+                    fullResponseLength += (response.length - 2);
+                    System.out.println(printData("fullresponse 3", fullResponse));
+                    return Arrays.copyOf(fullResponse, fullResponseLength);
+                } else {
+                    System.arraycopy(response, 0, fullResponse, fullResponseLength, response.length - 2);
+                    fullResponseLength += (response.length - 2);
+                    return Arrays.copyOf(fullResponse, fullResponseLength);
+                }
+
+            } else {
+                return Arrays.copyOf(response, (response.length - 2));
+            }
+        } catch (IOException e) {
+            //throw new RuntimeException(e);
+            return null;
+        } catch (Exception e) {
+            //throw new RuntimeException(e);
+            return null;
+        }
+        //return null;
+    }
+
+    /**
+     * checks if the response has an 0x'9100' at the end means success
+     * and the method returns the data without 0x'9100' at the end
+     * if any other trailing bytes show up the method returns false
+     *
+     * @param data
+     * @return
+     */
+    private boolean checkResponse(@NonNull byte[] data) {
+        // simple sanity check
+        if (data.length < 2) {
+            return false;
+        } // not ok
+        int status = ((0xff & data[data.length - 2]) << 8) | (0xff & data[data.length - 1]);
+        if (status == 0x9100) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * checks if the response has an 0x'91AF' at the end means success
+     * but there are more data frames available
+     * if any other trailing bytes show up the method returns false
+     *
+     * @param data
+     * @return
+     */
+    private boolean checkResponseMoreData(@NonNull byte[] data) {
+        // simple sanity check
+        if (data.length < 2) {
+            return false;
+        } // not ok
+        int status = ((0xff & data[data.length - 2]) << 8) | (0xff & data[data.length - 1]);
+        if (status == 0x91AF) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public String printData(String dataName, byte[] data) {
+        int dataLength;
+        String dataString = "";
+        if (data == null) {
+            dataLength = 0;
+            dataString = "IS NULL";
+        } else {
+            dataLength = data.length;
+            dataString = Utils.bytesToHex(data);
+        }
+        StringBuilder sb = new StringBuilder();
+        sb
+                .append(dataName)
+                .append(" length: ")
+                .append(dataLength)
+                .append(" data: ")
+                .append(dataString);
+        return sb.toString();
+    }
 
     /**
      * Converts an uncompressed secp256r1 / P-256 public point to the EC public key it is representing.
+     *
      * @param w a 64 byte uncompressed EC point starting with <code>04</code>
      * @return an <code>ECPublicKey</code> that the point represents
      */
@@ -243,6 +424,7 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
 
     /**
      * Converts an uncompressed secp256r1 / P-256 public point to the EC public key it is representing.
+     *
      * @param w a 64 byte uncompressed EC point consisting of just a 256-bit X and Y
      * @return an <code>ECPublicKey</code> that the point represents
      */
@@ -261,10 +443,9 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
     }
 
     public boolean checkEcdsaSignatureEcPubKey(final ECPublicKey
-                                                              ecPubKey, final byte[]
-                                                              signature, final byte[] data)
-            throws NoSuchAlgorithmException
-    {
+                                                       ecPubKey, final byte[]
+                                                       signature, final byte[] data)
+            throws NoSuchAlgorithmException {
         try {
             //final PublicKey publicKey = keyFac.generatePublic(ecPubKey);
             final Signature dsa = Signature.getInstance("NONEwithECDSA");
