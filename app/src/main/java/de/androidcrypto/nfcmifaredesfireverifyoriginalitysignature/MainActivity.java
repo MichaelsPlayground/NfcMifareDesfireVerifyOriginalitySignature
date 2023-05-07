@@ -1,7 +1,6 @@
 package de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature;
 
 import static de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature.Utils.base64Decoding;
-import static de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature.Utils.bytesToHex;
 import static de.androidcrypto.nfcmifaredesfireverifyoriginalitysignature.Utils.hexStringToByteArray;
 
 import android.content.Context;
@@ -9,13 +8,11 @@ import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.TagLostException;
 import android.nfc.tech.IsoDep;
-import android.nfc.tech.NfcA;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.widget.EditText;
-import android.widget.HorizontalScrollView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -25,19 +22,12 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
-import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.interfaces.ECPublicKey;
-import java.security.spec.ECFieldFp;
-import java.security.spec.ECParameterSpec;
-import java.security.spec.ECPoint;
-import java.security.spec.ECPublicKeySpec;
-import java.security.spec.EllipticCurve;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
@@ -49,6 +39,7 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
     private NfcAdapter mNfcAdapter;
     byte[] tagIdByte, tagSignatureByte;
     boolean signatureVerified = false;
+    // ultralight ev1: publicKeyNxp.setText("0490933bdcd6e99b4e255e3da55389a827564e11718e017292faf23226a96614b8"); // Ultralight EV1
     final String PublicKeyNxpDESFire_Light = "040E98E117AAA36457F43173DC920A8757267F44CE4EC5ADD3C54075571AEBBF7B942A9774A1D94AD02572427E5AE0A2DD36591B1FB34FCF3D";
     final String PublicKeyNxpDESFire_Ev2 = "04B304DC4C615F5326FE9383DDEC9AA892DF3A57FA7FFB3276192BC0EAA252ED45A865E3B093A3D0DCE5BE29E92F1392CE7DE321E3E5C52B3A";
     final String PublicKeyNxpDESFire_Ev3 = "041DB46C145D0A36539C6544BD6D9B0AA62FF91EC48CBC6ABAE36E0089A46F0D08C8A715EA40A63313B92E90DDC1730230E0458A33276FB743";
@@ -71,12 +62,7 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         readResult = findViewById(R.id.etVerifyResult);
 
         mNfcAdapter = NfcAdapter.getDefaultAdapter(this);
-
-        // ultralight ev1: publicKeyNxp.setText("0490933bdcd6e99b4e255e3da55389a827564e11718e017292faf23226a96614b8"); // Ultralight EV1
         publicKeyNxp.setText("the public key depends on the DESFire tyg type");
-
-        //publicKeyNxp.setText(publicKeyNxpDESFire_Ev3);
-
     }
 
     // This method is run in another thread when a card is discovered
@@ -86,8 +72,6 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
     public void onTagDiscovered(Tag tag) {
         // Read and or write to Tag here to the appropriate Tag Technology type class
         // in this example the card should be an Ndef Technology Type
-
-        System.out.println("NFC tag discovered");
 
         IsoDep isoDep = null;
 
@@ -114,8 +98,6 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                 });
 
                 isoDep.connect();
-
-                System.out.println("*** tagId: " + Utils.bytesToHex(tag.getId()));
 
                 // tag ID
                 tagIdByte = tag.getId();
@@ -177,7 +159,6 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                     runOnUiThread(() -> {
                         tagId.setText(Utils.bytesToHex(tagIdByte));
                     });
-                    System.out.println(printData("publicKeyNxpByte", publicKeyNxpByte));
                     // get the signature
                     byte getSignatureCommand = (byte) 0x3c;
                     byte[] getSignatureCommandParameter = new byte[]{(byte) 0x00};
@@ -202,21 +183,13 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                         } else {
                             // success: response contains (P)ACK or actual data
                             writeToUiAppend(readResult, "SUCCESS: response: " + Utils.bytesToHex(response));
-                            //System.out.println("write to page " + page + ": " + bytesToHex(response));
                             tagSignatureByte = response.clone();
                             runOnUiThread(() -> {
                                 tagSignature.setText(Utils.bytesToHex(tagSignatureByte));
                             });
 
                             // now we are going to verify
-//
-// signature: SUCCESS: response: 23b80023f6f970be3b9d47908cb80b284c7c6f8d8a25509e741af818271e9010279f449138df1e2d2c0cf37b1b677dc4354fbb97ca2e75819190
-// signature: SUCCESS: response: 23b80023f6f970be3b9d47908cb80b284c7c6f8d8a25509e741af818271e9010279f449138df1e2d2c0cf37b1b677dc4354fbb97ca2e75819190
-                            System.out.println("tagID: " + bytesToHex(tagIdByte));
-                            System.out.println("tagSignature: " + bytesToHex(tagSignatureByte));
-                            System.out.println("publicKeyByte: " + bytesToHex(publicKeyNxpByte));
-                            //byte[] signature = hexStringToByteArray(tagSignature.getText().toString());
-                            //byte[] publicKeyByte = hexStringToByteArray(publicKeyNxp.getText().toString());
+
                             // get the EC Public Key
                             ECPublicKey ecPubKey = null;
                             try {
@@ -241,7 +214,6 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                                 }
                             });
 
-
                             scrollView.postDelayed(new Runnable() {
                                 @Override
                                 public void run() {
@@ -252,14 +224,12 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                         }
                     } catch (TagLostException e) {
                         // Log and return
-                        System.out.println("*** TagLostException");
                         runOnUiThread(() -> {
                             readResult.setText("ERROR: Tag lost exception or command not recognized");
                         });
                         return;
                     } catch (IOException e) {
                         writeToUiAppend(readResult, "ERROR: IOException " + e.toString());
-                        System.out.println("*** IOException");
                         e.printStackTrace();
                         return;
                     }
@@ -284,7 +254,6 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
 
     public static byte[] wrapMessage(byte command, byte[] parameters, int offset, int length) throws Exception {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
-
         stream.write((byte) 0x90);
         stream.write(command);
         stream.write((byte) 0x00);
@@ -295,7 +264,6 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
             stream.write(parameters, offset, length);
         }
         stream.write((byte) 0x00);
-
         return stream.toByteArray();
     }
 
@@ -309,24 +277,18 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         try {
             // 1. round
             response = isoDep.transceive(wrapMessage(getVersionCommand));
-            System.out.println(printData("response 1", response));
             if (checkResponseMoreData(response)) {
                 System.arraycopy(response, 0, fullResponse, 0, response.length - 2);
-                System.out.println(printData("fullresponse 1", fullResponse));
                 fullResponseLength = response.length - 2;
                 // 2. round
                 response = isoDep.transceive(wrapMessage(moreDataCommand));
-                System.out.println(printData("response 2", response));
                 if (checkResponseMoreData(response)) {
                     System.arraycopy(response, 0, fullResponse, fullResponseLength, response.length - 2);
                     fullResponseLength += (response.length - 2);
-                    System.out.println(printData("fullresponse 2", fullResponse));
                     // 3. round
                     response = isoDep.transceive(wrapMessage(moreDataCommand));
-                    System.out.println(printData("response 3", response));
                     System.arraycopy(response, 0, fullResponse, fullResponseLength, response.length - 2);
                     fullResponseLength += (response.length - 2);
-                    System.out.println(printData("fullresponse 3", fullResponse));
                     return Arrays.copyOf(fullResponse, fullResponseLength);
                 } else {
                     System.arraycopy(response, 0, fullResponse, fullResponseLength, response.length - 2);
@@ -447,7 +409,6 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                                                        signature, final byte[] data)
             throws NoSuchAlgorithmException {
         try {
-            //final PublicKey publicKey = keyFac.generatePublic(ecPubKey);
             final Signature dsa = Signature.getInstance("NONEwithECDSA");
             dsa.initVerify(ecPubKey);
             dsa.update(data);
@@ -496,7 +457,7 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
         runOnUiThread(() -> {
             String newString = message + "\n" + textView.getText().toString();
             textView.setText(newString);
-            System.out.println("signature: " + message);
+            System.out.println("message: " + message);
         });
     }
 
