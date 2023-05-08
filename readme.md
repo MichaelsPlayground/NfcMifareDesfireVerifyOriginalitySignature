@@ -2,7 +2,7 @@
 
 This app is verifying the ("originality") signature of a Mifare DESFire Light or EV2 / EV3 tag.
 
-Note: As the DESFire EV1 tag 
+Note: As the DESFire EV1 tag does not has a "get signature" command the **DESFire EV1 is not supported**.
 
 Kindly note that the code for verification of the signature is taken from the application note  
 AN11350, provided by NXP. Unfortunately the curve of the signature changed from SECP128R1 to SECP224R1. 
